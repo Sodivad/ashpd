@@ -5,11 +5,11 @@ use std::{collections::HashMap, fmt::Debug, time::Duration};
 use futures_util::{Stream, TryFutureExt};
 use serde::{Deserialize, Serialize};
 use zbus::zvariant::{
-    DeserializeDict, ObjectPath, OwnedObjectPath, OwnedValue, SerializeDict, Type,
+    DeserializeDict, ObjectPath, OwnedObjectPath, OwnedValue, SerializeDict, Type, Value
 };
 
 use super::{session::SessionPortal, HandleToken, Request, Session};
-use crate::{desktop::session::CreateSessionResponse, proxy::Proxy, Error, WindowIdentifier};
+use crate::{desktop::session::CreateSessionResponse, proxy::Proxy, Error, WindowIdentifier, ActivationToken};
 
 #[derive(Clone, SerializeDict, Type, Debug, Default)]
 #[zvariant(signature = "dict")]
@@ -134,6 +134,25 @@ impl ListShortcuts {
     /// A list of shortcuts.
     pub fn shortcuts(&self) -> &[Shortcut] {
         &self.shortcuts
+    }
+}
+
+/// Specified options for a [`GlobalShortcuts::configure_shortcuts`] request.
+#[derive(SerializeDict, Type, Debug, Default)]
+#[zvariant(signature = "dict")]
+struct ConfigureShortcutsOptions {
+    activation_token: Option<ActivationToken>,
+}
+
+impl ConfigureShortcutsOptions {
+    /// Sets the token that can be used to activate the chosen application.
+    #[must_use]
+    pub fn activation_token(
+        mut self,
+        activation_token: impl Into<Option<ActivationToken>>,
+    ) -> Self {
+        self.activation_token = activation_token.into();
+        self
     }
 }
 
@@ -274,6 +293,26 @@ impl<'a> GlobalShortcuts<'a> {
             .request(&options.handle_token, "ListShortcuts", &(session, &options))
             .await
     }
+
+    /// Configure all shortcuts.
+    ///
+    /// # Specifications
+    // See also [`ConfigureShortcuts`](TODO)
+    #[doc(alias = "ConfigureShortcuts")]
+    pub async fn configure_shortcuts(
+        &self,
+        session: &Session<'_, Self>,
+         identifier: Option<&WindowIdentifier>,
+         activation_token: Option<&ActivationToken>
+    ) -> Result<(), Error> {
+        let options= ConfigureShortcutsOptions::default()
+            .activation_token(activation_token.cloned());
+        let identifier = identifier.map(|i| i.to_string()).unwrap_or_default();
+        self.0
+            .call_versioned("ConfigureShortcuts", &(session, identifier, options), 2)
+            .await
+    }
+
 
     /// Signal emitted when shortcut becomes active.
     ///

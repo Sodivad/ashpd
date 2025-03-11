@@ -9,6 +9,7 @@ use ashpd::{
         ResponseError, Session,
     },
     WindowIdentifier,
+    ActivationToken,
 };
 use futures_util::{
     future::{AbortHandle, Abortable},
@@ -74,6 +75,9 @@ mod imp {
             klass.install_action_async("global_shortcuts.stop", None, |page, _, _| async move {
                 page.stop().await;
             });
+            klass.install_action_async("global_shortcuts.configure", None, |page, _, _ | async move {
+                page.configure().await;
+            })
         }
 
         fn instance_init(obj: &glib::subclass::InitializingObject<Self>) {
@@ -237,6 +241,16 @@ impl GlobalShortcutsPage {
         self.set_rebind_count(None);
         imp.activations.lock().await.clear();
         imp.triggers.lock().await.clear();
+    }
+
+    async fn configure(&self) {
+        let imp = self.imp();
+        if let Some(session) = &*imp.session.lock().await {
+            let root = self.native().unwrap();
+            let identifier = WindowIdentifier::from_native(&root).await;
+            let activation_token = ActivationToken::from_window(self);
+            let _ = GlobalShortcuts::new().await.unwrap().configure_shortcuts(&session, identifier.as_ref(), activation_token.as_ref()).await;
+        }
     }
 
     async fn display_activations(&self) {
